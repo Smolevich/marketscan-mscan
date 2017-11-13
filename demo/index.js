@@ -55,10 +55,12 @@ $("#recalculate").click(function(){
       "Price" : $("input[name=Price]").val()
     })
   }).done(function(response){
-
-    fill_table(response.Lease, "#lease");
-    fill_table(response.Retail, "#retail");
-
+    if (!response.error) {
+      fill_table(response.Lease, "#lease");
+      fill_table(response.Retail, "#retail");
+    } else {
+        alert('Api error: ' + response.error)
+    }
   }).always(function(){
     $("#recalculate").button('reset');
   });
@@ -76,6 +78,9 @@ $("#vehicle_lookup").on("submit", function(e){
     if(response === null){
       alert("Vehicle not found");
       return;
+    }
+    if (response.error) {
+        alert('Api error: ' + response.error)
     }
     var found_vehicle = response[0];
 

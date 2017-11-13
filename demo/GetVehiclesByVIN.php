@@ -2,13 +2,13 @@
 
 header('Content-type:application/json;charset=utf-8');
 
-require '../vendor/autoload.php';
+require_once '../vendor/autoload.php';
 
 use MarketScan\MScan;
 
 //Load credentials, then intialize an MScan API instance
-require 'credentials.php';
-$mscan = new MScan($marketscan_partner_id, $marketscan_account );
+require_once 'credentials.php';
+$mscan = new MScan($marketscan_partner_id, $marketscan_account, 'http://integration.marketscan.io/scan/rest/mscanservice/rest/mscanservice.rst/?', ['http_errors' => 0]);
 
 if(!isset($_REQUEST['vin'])){
   http_response_code(400);
@@ -16,5 +16,7 @@ if(!isset($_REQUEST['vin'])){
 }else{
   $vin = $_REQUEST['vin'];
 }
-
-echo json_encode($mscan->GetVehiclesByVINParams($vin), JSON_PRETTY_PRINT);
+$response = $mscan->GetVehiclesByVINParams($vin);
+$body = $response->getBody();
+$code = $response->getCode();
+echo is_array($body) && $code === 200 ? json_encode($body, JSON_PRETTY_PRINT) : $body;

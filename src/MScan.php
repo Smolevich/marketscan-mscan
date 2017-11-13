@@ -2,6 +2,11 @@
 
 namespace MarketScan;
 
+use \DateTime;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\{Client, TransferStats};
+use MarketScan\Response;
+
 /*
 
 http://www.marketscan.com/mScanAPIDocumentation/html/b40172da-018e-4a80-a14f-37918e8748e3.htm
@@ -32,42 +37,59 @@ class MScan
     const REBATE_RECIPIENT_CUSTOMER = 1;
     const REBATE_RECIPIENT_DEALER = 2;
 
+    private $client;
     private $partner_id;
     private $account;
     private $base_url = 'http://mscanapi.com/rest/mScanService.rst/?';
 
-    public function __construct($partner_id, $account, $base_url = null)
+    public function __construct($partner_id, $account, $base_url = null, $guzzle_options = [])
     {
         $this->partner_id = $partner_id;
         $this->account = $account;
-        if ($base_url) {
-            $this->base_url = $base_url;
-        }
+        $this->base_url = $base_url ? : $this->base_url;
+        $this->client = new Client($guzzle_options);
     }
 
     public function api_request($command, $method = "GET", $append_to_url = "", $data = null)
     {
-        $url = $this->base_url . $command . '/' . $this->partner_id . '/' . $this->account;
-
-        if ($append_to_url) {
-            if ($append_to_url{0} != '/') {
-                $url .= '/';
-            } //Insert a / between account and this, but don't double up
-            $url .= $append_to_url;
-        }
-
+        $url = sprintf('%s%s/%s/%s%s',
+            $this->base_url,
+            $command,
+            $this->partner_id,
+            $this->account,
+            $append_to_url ? "/" . $append_to_url : ""
+        );
         if ($data !== null) {
             $data = json_encode($data);
         }
 
-        return new \GuzzleHttp\Psr7\Request($method, $url, [], $data);
+        return new Request($method, $url, [], $data);
     }
 
     public function call_request_synchronously($request)
     {
-        $client = new \GuzzleHttp\Client();
-        $response = $client->send($request);
-        return json_decode($response->getBody(), true);
+        $info = [];
+        $response = $this->client->send($request,
+            [
+                "on_stats" => function(TransferStats $stats) use (&$info) {
+                    $info =  $stats->getHandlerStats();
+                }
+            ]
+        );
+        try {
+            $body = $response->getBody()->getContents();
+        } catch (GuzzleException $e) {
+            return new Response(["error" => $e->getMessage()]);
+        }
+        return new Response(
+            [
+                "code" => $response->getStatusCode(),
+                "info" => $info,
+                "request" => $request ?? null,
+                "body" => $body,
+                "headers" => $response->getHeaders()
+            ]
+        );
     }
 
     public function call_api($command, $method = "GET", $append_to_url = "", $data = null)
@@ -168,7 +190,7 @@ class MScan
     public function GetRebatesParams_request($parameters)
     {
         $defaults = [
-            'DateTimeStamp' => date(\DateTime::ISO8601), //'2016-09-13T03:07:46.069Z'
+            'DateTimeStamp' => date(DateTime::ISO8601), //'2016-09-13T03:07:46.069Z'
             'IncludeExpired' => false
         ];
 
@@ -189,12 +211,8 @@ class MScan
     public function GetStateFeeTax($zip, $region_id = null, $in_city = null)
     {
         $append_to_url = $zip;
-        if($region_id){
-            $append_to_url .= '/' . $region_id;
-        }
-        if($in_city !== null){
-            $append_to_url .= '/' . self::bool_to_url_component($in_city);
-        }
+        $append_to_url .= $region_id ? '/' . $region_id : '';
+        $append_to_url .= $in_city ? '/' . self::bool_to_url_component($in_city) : '';
 
         return $this->call_api(
             'GetStateFeeTax',
@@ -244,11 +262,7 @@ class MScan
     */
     public function GetVehiclesByVINParams($arg)
     {
-        if (is_array($arg)) {
-            $params = $arg;
-        } else {
-            $params = ['VIN' => $arg];
-        }
+        $params = is_array($arg) ? $arg : ['VIN' => $arg];
         return $this->call_api(
             'GetVehiclesByVINParams',
             'POST',

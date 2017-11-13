@@ -2,14 +2,13 @@
 
 header('Content-type:application/json;charset=utf-8');
 
-require '../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 use MarketScan\MScan;
 
 //Load credentials, then intialize an MScan API instance
-require 'credentials.php';
-$mscan = new MScan($marketscan_partner_id, $marketscan_account );
-
+require_once 'credentials.php';
+$mscan = new MScan($marketscan_partner_id, $marketscan_account, 'http://integration.marketscan.io/scan/rest/mscanservice/rest/mscanservice.rst/?', ['http_errors' => 0]);
 $scan_request = [
   "AutoRebateParams" => [
     "ZIP" => 95032, //Customer's ZIP code
@@ -83,5 +82,12 @@ if(isset($request_data['Retail']['Term'])){
   $scan_request['mPencil']['RetailPart']['Term'] = $request_data['Retail']['Term'];
 }
 
-
-echo json_encode($mscan->RunScan($scan_request), JSON_PRETTY_PRINT);
+$response = $mscan->RunScan($scan_request);
+$code = $response->getCode();
+$body = $response->getBody();
+$error = $response->getError();
+if ($error) {
+    echo json_encode(["error" => $error]);
+} else {
+    echo is_array($body) && $code === 200 ? json_encode($body, JSON_PRETTY_PRINT) : json_encode(["error" => $body]);
+} 
